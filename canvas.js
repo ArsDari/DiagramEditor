@@ -1,150 +1,157 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const canvas = document.getElementById('canvas');
-    const context = canvas.getContext('2d');
+const state = {
+    current: "unfocused",
+    tool: "line",
+    scale: 1,
+    selectedElement: null,
+    elements: []
+};
 
-    document.oncontextmenu = () => {
-        return false;
-    };
+const setState = (newState) => { state.current = newState; };
+const getState = () => state.current;
+const setTool = (tool) => { state.tool = tool; };
+const getTool = () => state.tool;
+const setScale = (scale) => { state.scale = scale; };
+const getScale = () => state.scale;
+const setSelectedElement = (element) => { state.selectedElement = element; };
+const getSelectedElement = () => state.selectedElement;
+const getElements = () => state.elements;
 
-    const drawings = [];
-
-    let cursorX;
-    let cursorY;
-    let prevCursorX;
-    let prevCursorY;
-
-    let offsetX = 0;
-    let offsetY = 0;
-
-    let scale = 1;
-
-    function toScreenX(xTrue) {
-        return (xTrue + offsetX) * scale;
+const distance = (a, b) => Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
+function isWithinElement(x, y, element) {
+    const { x1, y1, x2, y2 } = element.coordinates;
+    const { type } = element.properties;
+    switch (type) {
+        case "rectangle":
+            const minX = Math.min(x1, x2);
+            const maxX = Math.max(x1, x2);
+            const minY = Math.min(y1, y2);
+            const maxY = Math.max(y1, y2);
+            return x >= minX && x <= maxX && y >= minY && y <= maxY;
+        case "line":
+            const a = { x: x1, y: y1 };
+            const b = { x: x2, y: y2 };
+            const c = { x, y };
+            const offset = distance(a, b) - (distance(a, c) + distance(b, c));
+            return Math.abs(offset) < 1;
+        default:
+            console.log(`Неизвестный тип: ${type}`);
+            break;
     }
+}
+const getElementAtPosition = (x, y, elements) => elements.find((element) => isWithinElement(x, y, element));
 
-    function toScreenY(yTrue) {
-        return (yTrue + offsetY) * scale;
-    }
+const enableCanvas = () => {
+    const canvas = document.getElementById("canvas");
+    const context = canvas.getContext("2d");
 
-    function toTrueX(xScreen) {
-        return (xScreen / scale) - offsetX;
-    }
+    // ---
 
-    function toTrueY(yScreen) {
-        return (yScreen / scale) - offsetY;
-    }
+    document.getElementById("selection").onchange = () => { setTool("selection"); };
+    document.getElementById("line").onchange = () => { setTool("line"); };
+    document.getElementById("rectangle").onchange = () => { setTool("rectangle"); };
 
-    function trueHeight() {
-        return canvas.clientHeight / scale;
-    }
+    // ---
 
-    function trueWidth() {
-        return canvas.clientWidth / scale;
-    }
-
-    function redrawCanvas() {
-        canvas.width = document.body.clientWidth;
-        canvas.height = document.body.clientHeight;
-
-        context.fillStyle = '#FFF';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        for (let i = 0; i < drawings.length; i++) {
-            const line = drawings[i];
-            drawLine(toScreenX(line.x0), toScreenY(line.y0), toScreenX(line.x1), toScreenY(line.y1));
-        }
-    }
-
-    redrawCanvas();
-
-    window.addEventListener("resize", (event) => {
-        redrawCanvas();
-    });
-
-    canvas.addEventListener('mousedown', onMouseDown);
-    canvas.addEventListener('mouseup', onMouseUp, false);
-    canvas.addEventListener('mouseout', onMouseUp, false);
-    canvas.addEventListener('mousemove', onMouseMove, false);
-    canvas.addEventListener('wheel', onMouseWheel, false);
-
-    let leftMouseDown = false;
-    let rightMouseDown = false;
-
-    function onMouseDown(event) {
-        if (event.button == 0) {
-            leftMouseDown = true;
-            rightMouseDown = false;
-        }
-
-        if (event.button == 2) {
-            rightMouseDown = true;
-            leftMouseDown = false;
-        }
-
-        cursorX = event.pageX;
-        cursorY = event.pageY;
-        prevCursorX = event.pageX;
-        prevCursorY = event.pageY;
-    }
-
-    function onMouseMove(event) {
-        cursorX = event.pageX;
-        cursorY = event.pageY;
-        const scaledX = toTrueX(cursorX);
-        const scaledY = toTrueY(cursorY);
-        const prevScaledX = toTrueX(prevCursorX);
-        const prevScaledY = toTrueY(prevCursorY);
-
-        if (leftMouseDown) {
-            drawings.push({
-                x0: prevScaledX,
-                y0: prevScaledY,
-                x1: scaledX,
-                y1: scaledY
-            });
-            drawLine(prevCursorX, prevCursorY, cursorX, cursorY);
-        }
-
-        if (rightMouseDown) {
-            offsetX += (cursorX - prevCursorX) / scale;
-            offsetY += (cursorY - prevCursorY) / scale;
-            redrawCanvas();
-        }
-        
-        prevCursorX = cursorX;
-        prevCursorY = cursorY;
-    }
-
-    function onMouseUp() {
-        leftMouseDown = false;
-        rightMouseDown = false;
-    }
-
-    function onMouseWheel(event) {
-        const deltaY = event.deltaY;
-        const scaleAmount = -deltaY / 500;
-        scale = scale * (1 + scaleAmount);
-
-        var distX = event.pageX / canvas.clientWidth;
-        var distY = event.pageY / canvas.clientHeight;
-
-        const unitsZoomedX = trueWidth() * scaleAmount;
-        const unitsZoomedY = trueHeight() * scaleAmount;
-
-        const unitsAddLeft = unitsZoomedX * distX;
-        const unitsAddTop = unitsZoomedY * distY;
-
-        offsetX -= unitsAddLeft;
-        offsetY -= unitsAddTop;
-
-        redrawCanvas();
-    }
-
-    function drawLine(x0, y0, x1, y1) {
+    function drawElement(element) {
         context.beginPath();
-        context.moveTo(x0, y0);
-        context.lineTo(x1, y1);
-        context.strokeStyle = '#000';
-        context.lineWidth = 2;
+        const coordinates = element.coordinates;
+        const properties = element.properties;
+        switch (properties.type) {
+            case "line":
+                context.moveTo(coordinates.x1, coordinates.y1);
+                context.lineTo(coordinates.x2, coordinates.y2);
+                break;
+            case "rectangle":
+                const width = coordinates.x2 - coordinates.x1;
+                const height = coordinates.y2 - coordinates.y1;
+                context.rect(coordinates.x1, coordinates.y1, width, height);
+                break;
+            default:
+                console.log(`Неизвестный тип: ${properties.type}`);
+                break;
+        }
+        // context.strokeStyle = properties.strokeStyle;
+        // context.lineWidth = properties.lineWidth;
         context.stroke();
     }
-});
+
+    function createElement(coordinates, properties) {
+        getElements().push({ coordinates, properties });
+    }
+
+    function updateCanvas() {
+        canvas.width = document.body.clientWidth;
+        canvas.height = document.body.clientHeight;
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        getElements().forEach((element) => { drawElement(element); });
+    }
+
+    // ---
+
+    window.addEventListener("resize", (event) => { updateCanvas(); });
+    updateCanvas();
+
+    canvas.addEventListener("mousedown", (event) => {
+        const { clientX, clientY } = event;
+        if (getTool() == "selection") {
+            const element = getElementAtPosition(clientX, clientY, getElements());
+            if (element) {
+                element.offset = {
+                    x: clientX - element.coordinates.x1,
+                    y: clientY - element.coordinates.y1
+                };
+                setSelectedElement(element);
+                setState("moving");
+            }
+        } else {
+            createElement({
+                x1: clientX,
+                y1: clientY,
+                x2: null,
+                y2: null
+            }, {
+                type: getTool()
+            });
+            setState("drawing");
+        }
+    });
+
+    canvas.addEventListener("mousemove", (event) => {
+        const { clientX, clientY } = event;
+        if (getTool() == "selection") {
+            event.target.style.cursor = getElementAtPosition(clientX, clientY, getElements()) ? "move" : "default";
+        }
+        if (getState() == "moving") {
+            const element = getSelectedElement();
+            const coordinates = element.coordinates;
+            const offset = element.offset;
+            const width = coordinates.x2 - coordinates.x1;
+            const height = coordinates.y2 - coordinates.y1;
+
+            coordinates.x1 = clientX - offset.x;
+            coordinates.y1 = clientY - offset.y;
+            coordinates.x2 = clientX - offset.x + width;
+            coordinates.y2 = clientY - offset.y + height;
+        } else if (getState() == "drawing") {
+            const element = getElements().at(-1);
+            switch (element.properties.type) {
+                case "line":
+                case "rectangle":
+                    element.coordinates.x2 = clientX;
+                    element.coordinates.y2 = clientY;
+                    break;
+                default:
+                    console.log(`Неизвестный тип: ${element.properties.type}`)
+                    break;
+            }
+        }
+        updateCanvas();
+    });
+
+    canvas.addEventListener("mouseup", (event) => {
+        setState("unfocused");
+        setSelectedElement(null);
+    });
+};
+
+document.addEventListener("DOMContentLoaded", enableCanvas);
