@@ -2,8 +2,11 @@ const state = {
     current: "unfocused",
     tool: "selection",
     scale: 1,
+    panOffset: { x: 0, y: 0 },
+    mouseOffset: { x: 0, y: 0 },
     selectedElement: null,
-    elements: []
+    elements: [],
+    pressedKeys: new Set()
 };
 
 const setState = (newState) => { state.current = newState; };
@@ -12,10 +15,31 @@ const setTool = (tool) => { state.tool = tool; };
 const getTool = () => state.tool;
 const setScale = (scale) => { state.scale = scale; };
 const getScale = () => state.scale;
+const setPanOffset = (offset) => { state.panOffset = offset };
+const getPanOffset = () => state.panOffset;
+const setMouseOffset = (offset) => { state.mouseOffset = offset };
+const getMouseOffset = () => state.mouseOffset;
 const setSelectedElement = (element) => { state.selectedElement = element; };
 const getSelectedElement = () => state.selectedElement;
 const getElements = () => state.elements;
 const getLastElement = () => state.elements.at(-1);
+const getPressedKeys = () => state.pressedKeys;
+
+// const history = {
+//     elements: [],
+//     index: 0
+// };
+
+// const addStepToHistory = (action) => {
+//     const nextStep = typeof (action) == "function" ? action(history.elements[index]) : action;
+//     history.elements.push(nextStep);
+//     history.index++;
+// };
+// const undo = () => {
+//     if (history.index > 0) {
+//         history.index--;
+//     }
+// };
 
 const distance = (a, b) => Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
 const nearPoint = (x, y, x1, y1) => {
@@ -107,6 +131,12 @@ const resizeCoordinates = (clientX, clientY, coordinates, position) => {
     }
 };
 
+const getMouseCoordinates = (event) => {
+    const clientX = event.clientX - getPanOffset().x;
+    const clientY = event.clientY - getPanOffset().y;
+    return { clientX, clientY };
+}
+
 const enableCanvas = () => {
     const canvas = document.getElementById("canvas");
     const context = canvas.getContext("2d");
@@ -158,19 +188,22 @@ const enableCanvas = () => {
                 element.properties = properties;
             }
         } else {
-            console.log(`Элемент с id: ${id} не найден`);
+            console.warn(`Элемент с id: ${id} не найден`);
         }
     }
 
     function deleteElement(id) {
-        getElements() = getElements().filter((element) => element.id == id);
+        getElements() = getElements().filter((element) => element.id != id);
     }
 
     function updateCanvas() {
         canvas.width = document.body.clientWidth;
         canvas.height = document.body.clientHeight;
         context.clearRect(0, 0, canvas.width, canvas.height);
+        context.save();
+        context.translate(getPanOffset().x, getPanOffset().y);
         getElements().forEach((element) => { drawElement(element); });
+        context.restore();
     }
 
     // ---
@@ -179,7 +212,14 @@ const enableCanvas = () => {
     updateCanvas();
 
     canvas.addEventListener("mousedown", (event) => {
-        const { clientX, clientY } = event;
+        const { clientX, clientY } = getMouseCoordinates(event);
+        if (event.button == 1) {
+            if (getPressedKeys().size == 0) {
+                setState("panning");
+                setMouseOffset({ x: clientX, y: clientY });
+            }
+            return;
+        }
         switch (getTool()) {
             case "selection": {
                 const element = getElementAtPosition(clientX, clientY, getElements());
@@ -207,6 +247,7 @@ const enableCanvas = () => {
                 }, {
                     type: getTool()
                 });
+                setSelectedElement(getLastElement());
                 setState("drawing");
                 break;
             }
@@ -216,7 +257,7 @@ const enableCanvas = () => {
     });
 
     canvas.addEventListener("mousemove", (event) => {
-        const { clientX, clientY } = event;
+        const { clientX, clientY } = getMouseCoordinates(event);
         if (getTool() == "selection") {
             const element = getElementAtPosition(clientX, clientY, getElements());
             event.target.style.cursor = element ? cursorAtPosition(element.position) : "default";
@@ -256,6 +297,14 @@ const enableCanvas = () => {
                 updateElement(id, resizeCoordinates(clientX, clientY, coordinates, position));
                 break;
             }
+            case "panning": {
+                const panOffset = getPanOffset();
+                const mouseOffset = getMouseOffset();
+                const deltaX = clientX - mouseOffset.x;
+                const deltaY = clientY - mouseOffset.y;
+                setPanOffset({ x: panOffset.x + deltaX, y: panOffset.y + deltaY });
+                break;
+            }
             default:
                 console.warn(`Неизвестное состояние: ${getState()}`);
                 break;
@@ -264,13 +313,29 @@ const enableCanvas = () => {
     });
 
     canvas.addEventListener("mouseup", (event) => {
-        if (getState() == "drawing" || getState() == "resizing") {
-            const element = getLastElement();
-            const { x1, y1, x2, y2 } = adjustCoordinates(element);
-            updateElement(element.id, { x1, y1, x2, y2 });
+        if (getSelectedElement()) {
+            if (getState() == "drawing" || getState() == "resizing") {
+                const element = getLastElement();
+                const { x1, y1, x2, y2 } = adjustCoordinates(element);
+                updateElement(element.id, { x1, y1, x2, y2 });
+            }
         }
         setState("unfocused");
         setSelectedElement(null);
+    });
+
+    // canvas.addEventListener("wheel", (event) => {
+    //     const panOffset = getPanOffset();
+    //     panOffset.x -= event.deltaX;
+    //     panOffset.y -= event.deltaY;
+    // });
+
+    window.addEventListener("keydown", (event) => {
+        getPressedKeys().add(event.key);
+    });
+
+    window.addEventListener("keyup", (event) => {
+        getPressedKeys().delete(event.key);
     });
 };
 
