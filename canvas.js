@@ -2,6 +2,7 @@ const state = {
     current: "unfocused",
     tool: "selection",
     scale: 1,
+    scaledOffset: { x: 0, y: 0 },
     panOffset: { x: 0, y: 0 },
     mouseOffset: { x: 0, y: 0 },
     selectedElement: null,
@@ -15,6 +16,8 @@ const setTool = (tool) => { state.tool = tool; };
 const getTool = () => state.tool;
 const setScale = (scale) => { state.scale = scale; };
 const getScale = () => state.scale;
+const setScaledOffset = (offset) => { state.scaledOffset = offset };
+const getScaledOffset = () => state.scaledOffset;
 const setPanOffset = (offset) => { state.panOffset = offset };
 const getPanOffset = () => state.panOffset;
 const setMouseOffset = (offset) => { state.mouseOffset = offset };
@@ -132,9 +135,19 @@ const resizeCoordinates = (clientX, clientY, coordinates, position) => {
 };
 
 const getMouseCoordinates = (event) => {
-    const clientX = event.clientX - getPanOffset().x;
-    const clientY = event.clientY - getPanOffset().y;
+    const scale = getScale();
+    const scaledOffset = getScaledOffset();
+    const panOffset = getPanOffset();
+    const clientX = (event.clientX - panOffset.x * scale + scaledOffset.x) / scale;
+    const clientY = (event.clientY - panOffset.y * scale + scaledOffset.y) / scale;
     return { clientX, clientY };
+}
+const zoomingBy = (delta) => {
+    let scale = getScale() + delta;
+    scale = Math.min(scale, 20);
+    scale = Math.max(scale, 0.1);
+    setScale(scale);
+    console.log(getScale());
 }
 
 const enableCanvas = () => {
@@ -200,8 +213,17 @@ const enableCanvas = () => {
         canvas.width = document.body.clientWidth;
         canvas.height = document.body.clientHeight;
         context.clearRect(0, 0, canvas.width, canvas.height);
+
+        const scale = getScale();
+        const scaledWidth = canvas.width * scale;
+        const scaledHeight = canvas.height * scale;
+        const scaledOffset = { x: (scaledWidth - canvas.width) / 2, y: (scaledHeight - canvas.height) / 2 }
+        const panOffset = getPanOffset();
+        setScaledOffset(scaledOffset);
         context.save();
-        context.translate(getPanOffset().x, getPanOffset().y);
+        context.translate(panOffset.x * scale - scaledOffset.x, panOffset.y * scale - scaledOffset.y);
+        context.scale(scale, scale);
+
         getElements().forEach((element) => { drawElement(element); });
         context.restore();
     }
@@ -324,11 +346,20 @@ const enableCanvas = () => {
         setSelectedElement(null);
     });
 
-    // canvas.addEventListener("wheel", (event) => {
-    //     const panOffset = getPanOffset();
-    //     panOffset.x -= event.deltaX;
-    //     panOffset.y -= event.deltaY;
-    // });
+    canvas.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        let delta = event.deltaY;
+        const pressedKeys = getPressedKeys();
+        delta *= -0.005;
+        if (pressedKeys.size == 1 && pressedKeys.has("Control")) {
+            delta *= 2.5;
+        }
+        zoomingBy(delta);
+        // const panOffset = getPanOffset();
+        // panOffset.x -= event.deltaX;
+        // panOffset.y -= event.deltaY;
+        updateCanvas();
+    });
 
     window.addEventListener("keydown", (event) => {
         getPressedKeys().add(event.key);
