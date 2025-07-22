@@ -62,21 +62,31 @@ const getPressedKeys = () => state.pressedKeys;
 
 // ---
 
-const adjustCoordinates = (element) => {
-    const { coordinates, type } = element;
+const adjustCoordinates = (coordinates, type) => {
     const { x1, y1, x2, y2 } = coordinates;
     switch (type) {
         case "rectangle":
-            const minX = Math.min(x1, x2);
-            const maxX = Math.max(x1, x2);
-            const minY = Math.min(y1, y2);
-            const maxY = Math.max(y1, y2);
-            return { x1: minX, y1: minY, x2: maxX, y2: maxY };
+            return {
+                x1: Math.min(x1, x2),
+                y1: Math.min(y1, y2),
+                x2: Math.max(x1, x2),
+                y2: Math.max(y1, y2)
+            };
         case "line":
             if (x1 < x2 || (x1 == x2 && y1 < y2)) {
-                return { x1: x1, y1: y1, x2: x2, y2: y2 };
+                return {
+                    x1: x1,
+                    y1: y1,
+                    x2: x2,
+                    y2: y2
+                };
             } else {
-                return { x1: x2, y1: y2, x2: x1, y2: y1 };
+                return {
+                    x1: x2,
+                    y1: y2,
+                    x2: x1,
+                    y2: y1
+                };
             }
         default:
             console.warn(`Неизвестный тип: ${type}`);
@@ -84,8 +94,7 @@ const adjustCoordinates = (element) => {
     }
 };
 
-const resizeCoordinates = (mousePosition, element) => {
-    const { coordinates, position } = element;
+const resizeCoordinates = (mousePosition, coordinates, position) => {
     const { x1, y1, x2, y2 } = coordinates;
     switch (position) {
         case "tl":
@@ -104,7 +113,7 @@ const resizeCoordinates = (mousePosition, element) => {
     }
 };
 
-const cursorAtPosition = (position) => {
+const cursorAtPosition = position => {
     switch (position) {
         case "tl":
         case "br":
@@ -191,8 +200,14 @@ const enableCanvas = () => {
     const drawElement = element => {
         const { coordinates, type } = element;
         const { x1, y1, x2, y2 } = coordinates;
+        const selectedElement = getSelectedElement();
         context.save();
         context.beginPath();
+        if (selectedElement) {
+            if (selectedElement.id == element.id) {
+                context.lineWidth += 1;
+            }
+        }
         switch (type) {
             case "line": {
                 context.moveTo(x1, y1);
@@ -262,6 +277,8 @@ const enableCanvas = () => {
                         setState("resizing");
                     }
                     selectElement(element);
+                } else {
+                    selectElement(null);
                 }
                 break;
             }
@@ -332,7 +349,10 @@ const enableCanvas = () => {
             }
             case "resizing": {
                 const element = getSelectedElement();
-                updateElement(element, { coordinates: resizeCoordinates(mousePosition, element) });
+                const coordinates = adjustCoordinates(
+                    resizeCoordinates(mousePosition, element.coordinates, element.position), element.type
+                );
+                updateElement(element, { coordinates });
                 break;
             }
             case "panning": {
@@ -350,17 +370,18 @@ const enableCanvas = () => {
         updateCanvas();
     });
 
-    canvas.addEventListener("mouseup", () => {
+    canvas.addEventListener("mouseup", event => {
         if (getSelectedElement()) {
             const state = getState();
             switch (state) {
-                case "moving": {
+                case "panning":
+                case "moving":
                     break;
-                }
                 case "drawing":
                 case "resizing": {
                     const element = getLastElement();
-                    updateElement(element, { coordinates: adjustCoordinates(element) });
+                    const { coordinates, type } = element;
+                    updateElement(element, { coordinates: adjustCoordinates(coordinates, type) });
                     break;
                 }
                 default:
@@ -369,13 +390,12 @@ const enableCanvas = () => {
             }
         }
         setState("unfocused");
-        selectElement(null);
         updateCanvas();
     });
 
     canvas.addEventListener("wheel", event => {
         event.preventDefault();
-        let delta = event.deltaY > 0? -0.1 : 0.1;
+        let delta = event.deltaY > 0 ? -0.1 : 0.1;
         const pressedKeys = getPressedKeys();
         if (pressedKeys.size == 1 && pressedKeys.has("Control")) {
             delta *= 2;
