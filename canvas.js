@@ -7,7 +7,7 @@ const state = {
     mouseOffset: { x: 0, y: 0 },
     elements: [],
     newElementId: 0,
-    selectedElementId: null,
+    selectedElement: null,
     pressedKeys: new Set()
 }
 
@@ -39,37 +39,32 @@ const deleteElement = id => {
         console.warn(`Элемент с идентификатором: ${id} не найден`);
     }
 };
-const updateElement = (id, values) => {
-    const element = getElement(id);
-    if (element) {
-        if (values.coordinates) {
-            const coordinates = values.coordinates;
-            element.x1 = coordinates.x1;
-            element.y1 = coordinates.y1;
-            element.x2 = coordinates.x2;
-            element.y2 = coordinates.y2;
-        }
-        // ...
-    } else {
-        console.warn(`Элемент с идентификатором: ${id} не найден`);
+const updateElement = (element, values) => {
+    const { coordinates } = values;
+    if (coordinates) {
+        element.coordinates.x1 = coordinates.x1;
+        element.coordinates.y1 = coordinates.y1;
+        element.coordinates.x2 = coordinates.x2;
+        element.coordinates.y2 = coordinates.y2;
     }
+    // ...
 };
 
 const getElements = () => state.elements;
-const doToAllElements = callback => state.elements = state.elements.map(element => callback(element));
 const getLastElement = () => state.elements.at(-1);
 
 const getNewElementId = () => state.newElementId++;
 
-const selectElementById = id => state.selectedElementId = id;
-const getSelectedElement = () => getElement(state.selectedElementId);
+const selectElement = element => state.selectedElement = element;
+const getSelectedElement = () => state.selectedElement;
 
 const getPressedKeys = () => state.pressedKeys;
 
 // ---
 
 const adjustCoordinates = (element) => {
-    const { x1, y1, x2, y2, type } = element;
+    const { coordinates, type } = element;
+    const { x1, y1, x2, y2 } = coordinates;
     switch (type) {
         case "rectangle":
             const minX = Math.min(x1, x2);
@@ -90,7 +85,8 @@ const adjustCoordinates = (element) => {
 };
 
 const resizeCoordinates = (mousePosition, element) => {
-    const { x1, y1, x2, y2, position } = element;
+    const { coordinates, position } = element;
+    const { x1, y1, x2, y2 } = coordinates;
     switch (position) {
         case "tl":
         case "start":
@@ -127,7 +123,8 @@ const distance = (a, b) => Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y
 const checkPointsProximity = (a, b, distance) => Math.abs(a.x - b.x) < distance && Math.abs(a.y - b.y) < distance;
 
 const positionWithinElement = (position, element) => {
-    const { x1, y1, x2, y2, type } = element;
+    const { coordinates, type } = element;
+    const { x1, y1, x2, y2 } = coordinates;
     const proximity = 5;
     switch (type) {
         case "rectangle": {
@@ -160,7 +157,7 @@ const positionWithinElement = (position, element) => {
 const getElementAtPosition = position => {
     return getElements()
         .map(element => ({ ...element, position: positionWithinElement(position, element) }))
-        .find(position => position != null);
+        .find(element => element.position != null);
 };
 
 const getMouseCoordinates = event => {
@@ -177,7 +174,6 @@ const zoomingBy = delta => {
     scale = Math.min(scale, 20);
     scale = Math.max(scale, 0.1);
     setScale(scale);
-    //console.log(getScale());
 };
 
 // ---
@@ -193,7 +189,8 @@ const enableCanvas = () => {
     // ---
 
     const drawElement = element => {
-        const { x1, y1, x2, y2, type } = element;
+        const { coordinates, type } = element;
+        const { x1, y1, x2, y2 } = coordinates;
         context.save();
         context.beginPath();
         switch (type) {
@@ -257,14 +254,14 @@ const enableCanvas = () => {
             case "selection": {
                 const element = getElementAtPosition(mousePosition);
                 if (element) {
-                    element.mouseOffset.x = mousePosition.x - element.x1;
-                    element.mouseOffset.y = mousePosition.y - element.y1;
-                    selectElementById(element.id);
+                    element.mouseOffset.x = mousePosition.x - element.coordinates.x1;
+                    element.mouseOffset.y = mousePosition.y - element.coordinates.y1;
                     if (element.position == "inside") {
                         setState("moving");
                     } else {
                         setState("resizing");
                     }
+                    selectElement(element);
                 }
                 break;
             }
@@ -272,15 +269,17 @@ const enableCanvas = () => {
             case "rectangle": {
                 createElement({
                     id: getNewElementId(),
-                    x1: mousePosition.x,
-                    y1: mousePosition.y,
-                    x2: mousePosition.x,
-                    y2: mousePosition.y,
+                    coordinates: {
+                        x1: mousePosition.x,
+                        y1: mousePosition.y,
+                        x2: mousePosition.x,
+                        y2: mousePosition.y
+                    },
                     type: tool,
                     position: "",
                     mouseOffset: { x: 0, y: 0 }
                 });
-                selectElementById(getLastElement().id);
+                selectElement(getLastElement());
                 setState("drawing");
                 break;
             }
@@ -288,7 +287,6 @@ const enableCanvas = () => {
                 console.warn(`Неизвестный аргумент: ${tool}`);
                 break;
         }
-        console.log(state.selectedElementId);
     });
 
     canvas.addEventListener("mousemove", event => {
@@ -304,23 +302,27 @@ const enableCanvas = () => {
             }
             case "moving": {
                 const element = getSelectedElement();
-                const { x1, y1, x2, y2, mouseOffset } = element;
-                const width = x2 - x1;
-                const height = y2 - y1;
-                element.x1 = mousePosition.x - mouseOffset.x;
-                element.y1 = mousePosition.y - mouseOffset.y;
-                element.x2 = mousePosition.x - mouseOffset.x + width;
-                element.y2 = mousePosition.y - mouseOffset.y + height;
+                const { coordinates, mouseOffset } = element;
+                const width = coordinates.x2 - coordinates.x1;
+                const height = coordinates.y2 - coordinates.y1;
+                updateElement(element, {
+                    coordinates: {
+                        x1: mousePosition.x - mouseOffset.x,
+                        y1: mousePosition.y - mouseOffset.y,
+                        x2: mousePosition.x - mouseOffset.x + width,
+                        y2: mousePosition.y - mouseOffset.y + height
+                    }
+                });
                 break;
             }
             case "drawing": {
                 const element = getLastElement();
-                const { type } = element;
+                const { coordinates, type } = element;
                 switch (type) {
                     case "line":
                     case "rectangle":
-                        element.x2 = mousePosition.x;
-                        element.y2 = mousePosition.y;
+                        coordinates.x2 = mousePosition.x;
+                        coordinates.y2 = mousePosition.y;
                         break;
                     default:
                         console.warn(`Неизвестный тип: ${type}`)
@@ -330,7 +332,7 @@ const enableCanvas = () => {
             }
             case "resizing": {
                 const element = getSelectedElement();
-                updateElement(element.id, { coordinates: resizeCoordinates(mousePosition, element) });
+                updateElement(element, { coordinates: resizeCoordinates(mousePosition, element) });
                 break;
             }
             case "panning": {
@@ -358,7 +360,7 @@ const enableCanvas = () => {
                 case "drawing":
                 case "resizing": {
                     const element = getLastElement();
-                    updateElement(element.id, { coordinates: adjustCoordinates(element) });
+                    updateElement(element, { coordinates: adjustCoordinates(element) });
                     break;
                 }
                 default:
@@ -367,13 +369,13 @@ const enableCanvas = () => {
             }
         }
         setState("unfocused");
-        selectElementById(null);
+        selectElement(null);
         updateCanvas();
     });
 
     canvas.addEventListener("wheel", event => {
         event.preventDefault();
-        let delta = event.deltaY * -0.005;
+        let delta = event.deltaY > 0? -0.1 : 0.1;
         const pressedKeys = getPressedKeys();
         if (pressedKeys.size == 1 && pressedKeys.has("Control")) {
             delta *= 2;
