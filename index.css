@@ -4,16 +4,58 @@
     margin: 0;
 }
 
-#canvas {
+.container {
     display: block;
     width: 100vw;
     height: 100vh;
+    user-select: none;
+}
+
+.layer-ui {
+    position: absolute;
+    left: 16px;
+    top: 16px;
+    right: 16px;
+    bottom: 16px;
+    pointer-events: none;
+}
+
+.upper-toolbar {
+    position: absolute;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+.lower-toolbar {
+    position: absolute;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    bottom: 0;
 }
 
 .toolbar {
     background-color: white;
-    position: fixed;
     display: flex;
     flex-direction: row;
     gap: 8px;
+}
+
+.toolbar-tool {
+    pointer-events: all;
+}
+
+.scale-tool {
+    display: flex;
+    gap: 8px;
+}
+
+#current-scale {
+    width: 48px;
+    text-align: center;
+}
+
+#canvas {
+    display: block;
 }

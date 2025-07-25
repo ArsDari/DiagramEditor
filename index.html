@@ -10,21 +10,44 @@
 </head>
 
 <body>
-    <div class="toolbar">
-        <div class="toolbar-tool">
-            <input type="radio" name="tool" id="selection" class="toolbar-button" checked>
-            <label for="selection" class="toolbar-description">Выбор</label>
+    <div class="container">
+        <div class="layer-ui">
+            <div class="upper-toolbar">
+                <div class="toolbar">
+                    <div class="toolbar-tool">
+                        <input type="radio" name="tool" id="selection" class="toolbar-button" checked>
+                        <label for="selection" class="toolbar-description">Выбор</label>
+                    </div>
+                    <div class="toolbar-tool">
+                        <input type="radio" name="tool" id="line" class="toolbar-button">
+                        <label for="line" class="toolbar-description">Линия</label>
+                    </div>
+                    <div class="toolbar-tool">
+                        <input type="radio" name="tool" id="rectangle" class="toolbar-button">
+                        <label for="rectangle" class="toolbar-description">Прямоугольник</label>
+                    </div>
+                    <div class="toolbar-tool">
+                        <input type="radio" name="tool" id="arrow" class="toolbar-button">
+                        <label for="text" class="toolbar-description">Стрелка</label>
+                    </div>
+                    <!-- <div class="toolbar-tool">
+                        <input type="radio" name="tool" id="text" class="toolbar-button">
+                        <label for="text" class="toolbar-description">Текст</label>
+                    </div> -->
+                </div>
+            </div>
+            <div class="lower-toolbar">
+                <div class="toolbar">
+                    <div class="toolbar-tool scale-tool">
+                        <button id="zoom-out">-</button>
+                        <div id="current-scale"></div>
+                        <button id="zoom-in">+</button>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="toolbar-tool">
-            <input type="radio" name="tool" id="line" class="toolbar-button">
-            <label for="line" class="toolbar-description">Линия</label>
-        </div>
-        <div class="toolbar-tool">
-            <input type="radio" name="tool" id="rectangle" class="toolbar-button">
-            <label for="rectangle" class="toolbar-description">Прямоугольник</label>
-        </div>
+        <canvas id="canvas">Не поддерживается браузером</canvas>
     </div>
-    <canvas id="canvas">Не поддерживается браузером</canvas>
 </body>
 
 </html>
