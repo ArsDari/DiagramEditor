@@ -20,14 +20,14 @@
     pointer-events: none;
 }
 
-.upper-toolbar {
+.menu-top {
     position: absolute;
     width: 100%;
     display: flex;
     justify-content: center;
 }
 
-.lower-toolbar {
+.menu-bottom {
     position: absolute;
     width: 100%;
     display: flex;

@@ -1,11 +1,12 @@
 const STATE = {
     UNFOCUSED: "unfocused",
+    SELECTING: "selecting",
     MOVING: "moving",
     DRAWING: "drawing",
     RESIZING: "resizing",
     PANNING: "panning",
     WRITING: "writing"
-}
+};
 
 const TOOLS = {
     SELECTION: "selection",
@@ -13,7 +14,7 @@ const TOOLS = {
     LINE: "line",
     ARROW: "arrow",
     TEXT: "text"
-}
+};
 
 const POSITION = {
     TOPLEFT: "tl",
@@ -27,11 +28,11 @@ const POSITION = {
     INSIDE: "inside",
     START: "start",
     END: "end"
-}
+};
 
 const MOUSEBUTTONS = {
     SCROLLWHEEL: 1
-}
+};
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 10;
@@ -40,7 +41,7 @@ const SCALE_FACTOR = 1.1;
 const fileState = {
     elements: [],
     newElementId: 0
-}
+};
 
 const applicationState = {
     state: "unfocused",
@@ -49,8 +50,10 @@ const applicationState = {
     panOffset: { x: 0, y: 0 },
     mouseOffset: { x: 0, y: 0 },
     selectedElement: null,
+    selectionBox: { x1: 0, y1: 0, x2: 0, y2: 0 },
+    selectedElements: null,
     pressedKeys: new Set()
-}
+};
 
 const getElements = () => fileState.elements;
 
@@ -91,21 +94,22 @@ const getScale = () => applicationState.scale;
 const setPanOffset = (x, y) => {
     applicationState.panOffset.x = x;
     applicationState.panOffset.y = y;
-}
+};
 const updatePanOffset = (x, y) => {
     applicationState.panOffset.x += x;
     applicationState.panOffset.y += y;
-}
+};
 const getPanOffset = () => applicationState.panOffset;
 
 const setMouseOffset = (x, y) => {
     applicationState.mouseOffset.x = x;
     applicationState.mouseOffset.y = y;
-}
+};
 const getMouseOffset = () => applicationState.mouseOffset;
 
 const selectElement = element => applicationState.selectedElement = element;
 const getSelectedElement = () => applicationState.selectedElement;
+const getSelectedElements = () => applicationState.selectedElements;
 
 const getPressedKeys = () => applicationState.pressedKeys;
 
@@ -249,12 +253,12 @@ const positionWithinElement = (position, element) => {
             const topLine = isWithinRect(x1, y1 - 10, x2, y1, position) ? POSITION.TOPLINE : null;
             const rightLine = isWithinRect(x2, y1, x2 + 10, y2, position) ? POSITION.RIGHTLINE : null;
             const bottomLine = isWithinRect(x1, y2, x2, y2 + 10, position) ? POSITION.BOTTOMLINE : null;
+            const inside = isWithinRect(x1, y1, x2, y2, position) ? POSITION.INSIDE : null;
 
             const topLeft = checkPointsProximity(position, topLeftPoint, proximity) ? POSITION.TOPLEFT : null;
             const topRight = checkPointsProximity(position, topRightPoint, proximity) ? POSITION.TOPRIGHT : null;
             const bottomLeft = checkPointsProximity(position, bottomLeftPoint, proximity) ? POSITION.BOTTOMLEFT : null;
             const bottomRight = checkPointsProximity(position, bottomRightPoint, proximity) ? POSITION.BOTTOMRIGHT : null;
-            const inside = position.x >= x1 && position.x <= x2 && position.y >= y1 && position.y <= y2 ? POSITION.INSIDE : null;
             return topLeft || topRight || bottomLeft || bottomRight || leftLine || topLine || rightLine || bottomLine || inside;
         }
         case TOOLS.ARROW:
@@ -291,7 +295,7 @@ const toWorld = (x, y) => {
         x: Math.trunc((x - panOffset.x) / scale),
         y: Math.trunc((y - panOffset.y) / scale)
     };
-}
+};
 
 const toScreen = (x, y) => {
     const scale = getScale();
@@ -300,7 +304,7 @@ const toScreen = (x, y) => {
         x: Math.trunc(x * scale + panOffset.x),
         y: Math.trunc(y * scale + panOffset.y)
     };
-}
+};
 
 const scaleAt = (x, y, newScale) => {
     const oldScale = getScale();
@@ -310,6 +314,16 @@ const scaleAt = (x, y, newScale) => {
     setScale(newScale);
 };
 
+const getSelectionBox = () => applicationState.selectionBox;
+
+const startSelectionBox = position => {
+    const selectionBox = getSelectionBox();
+    selectionBox.x1 = position.x;
+    selectionBox.y1 = position.y;
+    selectionBox.x2 = position.x;
+    selectionBox.y2 = position.y;
+};
+
 // ---
 
 const enableCanvas = () => {
@@ -317,10 +331,10 @@ const enableCanvas = () => {
     const context = canvas.getContext("2d");
     const currentScaleOnPage = document.getElementById("current-scale");
 
-    document.getElementById("selection").onchange = () => setTool(TOOLS.SELECTION);
-    document.getElementById("line").onchange = () => setTool(TOOLS.LINE);
-    document.getElementById("rectangle").onchange = () => setTool(TOOLS.RECTANGLE);
-    document.getElementById("arrow").onchange = () => setTool(TOOLS.ARROW);
+    document.getElementById("selection").onclick = () => setTool(TOOLS.SELECTION);
+    document.getElementById("line").onclick = () => setTool(TOOLS.LINE);
+    document.getElementById("rectangle").onclick = () => setTool(TOOLS.RECTANGLE);
+    document.getElementById("arrow").onclick = () => setTool(TOOLS.ARROW);
     //document.getElementById("text").onchange = () => setTool(TOOLS.TEXT);
 
     document.getElementById("zoom-out").onclick = () => handleScale(canvas.width / 2, canvas.height / 2, 1 / SCALE_FACTOR);
@@ -344,7 +358,7 @@ const enableCanvas = () => {
             scaleAt(x, y, newScale);
         }
         currentScaleOnPage.innerHTML = `${Math.trunc(getScale() * 100)}%`;
-    }
+    };
 
     const drawElement = element => {
         const { coordinates, type } = element;
@@ -365,6 +379,7 @@ const enableCanvas = () => {
                     context.rect(x2 - distance, y2 - distance, rectWidth, rectWidth);
                     break;
                 }
+                case TOOLS.SELECTION:
                 case TOOLS.TEXT: {
                     break;
                 }
@@ -378,7 +393,6 @@ const enableCanvas = () => {
                     context.rect(x2, y2, rectWidth, rectWidth);
                     break;
                 }
-                case TOOLS.SELECTION:
                 default:
                     console.warn(`Неизвестный тип: ${type}`);
                     break;
@@ -400,102 +414,59 @@ const enableCanvas = () => {
                 break;
             }
             case TOOLS.ARROW: {
-                let quarter = "";
                 const width = Math.abs(x2 - x1);
                 const height = Math.abs(y2 - y1);
-                const length = Math.sqrt(width * width, height * height);
+                const { quarter } = element;
+                const [firstLine, secondLine] = element.lines;
                 context.moveTo(x1, y1);
-                if (x1 <= x2 && y1 > y2) {
-                    quarter = "first";
-                    if (width < height) {
-                        context.lineTo(x1 + width / 2, y1);
-                        context.lineTo(x1 + width / 2, y1 - height);
-                    } else {
-                        context.lineTo(x1, y1 - height / 2);
-                        context.lineTo(x1 + width, y1 - height / 2);
-                    }
-                } else if (x1 <= x2 && y1 <= y2) {
-                    quarter = "second";
-                    if (width < height) {
-                        context.lineTo(x1 + width / 2, y1);
-                        context.lineTo(x1 + width / 2, y1 + height);
-                    } else {
-                        context.lineTo(x1, y1 + height / 2);
-                        context.lineTo(x1 + width, y1 + height / 2);
-                    }
-                } else if (x1 > x2 && y1 <= y2) {
-                    quarter = "third";
-                    if (width < height) {
-                        context.lineTo(x1 - width / 2, y1);
-                        context.lineTo(x1 - width / 2, y1 + height);
-                    } else {
-                        context.lineTo(x1, y1 + height / 2);
-                        context.lineTo(x1 - width, y1 + height / 2);
-                    }
-                } else {
-                    quarter = "fourth";
-                    if (width < height) {
-                        context.lineTo(x1 - width / 2, y1);
-                        context.lineTo(x1 - width / 2, y1 - height);
-                    } else {
-                        context.lineTo(x1, y1 - height / 2);
-                        context.lineTo(x1 - width, y1 - height / 2);
-                    }
-                }
+                context.lineTo(firstLine.x, firstLine.y);
+                context.lineTo(secondLine.x, secondLine.y);
                 context.lineTo(x2, y2);
-                context.save();
                 context.moveTo(x2, y2);
-                const headLength = 20;
-                switch (quarter) {
-                    case "first":
-                        if (width < height) {
-                            context.lineTo(x2 - headLength * Math.cos(Math.PI / 8), y2 - headLength * Math.sin(Math.PI / 8));
-                            context.moveTo(x2, y2);
-                            context.lineTo(x2 - headLength * Math.cos(Math.PI / 8), y2 + headLength * Math.sin(Math.PI / 8));
-                        } else {
-                            context.lineTo(x2 + headLength * Math.sin(Math.PI / 8), y2 + headLength * Math.cos(Math.PI / 8));
-                            context.moveTo(x2, y2);
-                            context.lineTo(x2 - headLength * Math.sin(Math.PI / 8), y2 + headLength * Math.cos(Math.PI / 8));
-                        }
-                        break;
-                    case "second":
-                        if (width < height) {
-                            context.lineTo(x2 - headLength * Math.cos(Math.PI / 8), y2 - headLength * Math.sin(Math.PI / 8));
-                            context.moveTo(x2, y2);
-                            context.lineTo(x2 - headLength * Math.cos(Math.PI / 8), y2 + headLength * Math.sin(Math.PI / 8));
-                        } else {
-                            context.lineTo(x2 + headLength * Math.sin(Math.PI / 8), y2 - headLength * Math.cos(Math.PI / 8));
-                            context.moveTo(x2, y2);
-                            context.lineTo(x2 - headLength * Math.sin(Math.PI / 8), y2 - headLength * Math.cos(Math.PI / 8));
-                        }
-                        break;
-                    case "third": {
-                        if (width < height) {
-                            context.lineTo(x2 + headLength * Math.cos(Math.PI / 8), y2 - headLength * Math.sin(Math.PI / 8));
-                            context.moveTo(x2, y2);
-                            context.lineTo(x2 + headLength * Math.cos(Math.PI / 8), y2 + headLength * Math.sin(Math.PI / 8));
-                        } else {
-                            context.lineTo(x2 + headLength * Math.sin(Math.PI / 8), y2 - headLength * Math.cos(Math.PI / 8));
-                            context.moveTo(x2, y2);
-                            context.lineTo(x2 - headLength * Math.sin(Math.PI / 8), y2 - headLength * Math.cos(Math.PI / 8));
-                        }
-                        break;
+                const headLength = Math.min(Math.max(Math.abs(x2 - secondLine.x), Math.abs(y2 - secondLine.y)), 20);
+                const sinHeadLength = headLength * Math.sin(Math.PI / 8);
+                const conHeadLength = headLength * Math.cos(Math.PI / 8);
+                if (quarter == "first") {
+                    if (width < height) {
+                        context.lineTo(x2 + sinHeadLength, y2 + conHeadLength);
+                        context.moveTo(x2, y2);
+                        context.lineTo(x2 - sinHeadLength, y2 + conHeadLength);
+                    } else {
+                        context.lineTo(x2 - conHeadLength, y2 - sinHeadLength);
+                        context.moveTo(x2, y2);
+                        context.lineTo(x2 - conHeadLength, y2 + sinHeadLength);
                     }
-                    case "fourth":
-                        if (width < height) {
-                            context.lineTo(x2 + headLength * Math.cos(Math.PI / 8), y2 - headLength * Math.sin(Math.PI / 8));
-                            context.moveTo(x2, y2);
-                            context.lineTo(x2 + headLength * Math.cos(Math.PI / 8), y2 + headLength * Math.sin(Math.PI / 8));
-                        } else {
-                            context.lineTo(x2 + headLength * Math.sin(Math.PI / 8), y2 + headLength * Math.cos(Math.PI / 8));
-                            context.moveTo(x2, y2);
-                            context.lineTo(x2 - headLength * Math.sin(Math.PI / 8), y2 + headLength * Math.cos(Math.PI / 8));
-                        }
-                        break;
-                    default:
-                        break;
+                } else if (quarter == "second") {
+                    if (width < height) {
+                        context.lineTo(x2 + sinHeadLength, y2 - conHeadLength);
+                        context.moveTo(x2, y2);
+                        context.lineTo(x2 - sinHeadLength, y2 - conHeadLength);
+                    } else {
+                        context.lineTo(x2 - conHeadLength, y2 - sinHeadLength);
+                        context.moveTo(x2, y2);
+                        context.lineTo(x2 - conHeadLength, y2 + sinHeadLength);
+                    }
+                } else if (quarter == "third") {
+                    if (width < height) {
+                        context.lineTo(x2 + sinHeadLength, y2 - conHeadLength);
+                        context.moveTo(x2, y2);
+                        context.lineTo(x2 - sinHeadLength, y2 - conHeadLength);
+                    } else {
+                        context.lineTo(x2 + conHeadLength, y2 - sinHeadLength);
+                        context.moveTo(x2, y2);
+                        context.lineTo(x2 + conHeadLength, y2 + sinHeadLength);
+                    }
+                } else if (quarter == "fourth") {
+                    if (width < height) {
+                        context.lineTo(x2 + sinHeadLength, y2 + conHeadLength);
+                        context.moveTo(x2, y2);
+                        context.lineTo(x2 - sinHeadLength, y2 + conHeadLength);
+                    } else {
+                        context.lineTo(x2 + conHeadLength, y2 - sinHeadLength);
+                        context.moveTo(x2, y2);
+                        context.lineTo(x2 + conHeadLength, y2 + sinHeadLength);
+                    }
                 }
-                context.restore();
                 break;
             }
             case TOOLS.TEXT: {
@@ -512,6 +483,28 @@ const enableCanvas = () => {
         context.restore();
     };
 
+    const drawSelectionBox = () => {
+        context.save();
+        const { x1, y1, x2, y2 } = getSelectionBox();
+        const width = x2 - x1;
+        const height = y2 - y1;
+        context.fillStyle = "rgb(238 239 248 / 75%)";
+        context.fillRect(x1, y1, width, height);
+        context.restore();
+    };
+
+    const drawSelectionRect = () => {
+        context.save();
+        context.beginPath();
+        const { x1, y1, x2, y2 } = getSelectionBox();
+        const width = x2 - x1;
+        const height = y2 - y1;
+        context.strokeStyle = "rgb(105 101 219)";
+        context.rect(x1, y1, width, height);
+        context.stroke();
+        context.restore();
+    };
+
     const updateCanvas = () => {
         canvas.width = document.body.clientWidth;
         canvas.height = document.body.clientHeight;
@@ -519,9 +512,15 @@ const enableCanvas = () => {
         const scale = getScale();
         const panOffset = getPanOffset();
         context.setTransform(scale, 0, 0, scale, panOffset.x, panOffset.y);
+        if (getTool() == TOOLS.SELECTION && getState() == STATE.SELECTING) {
+            drawSelectionBox();
+        }
         getElements().forEach(element => drawElement(element));
+        if (getTool() == TOOLS.SELECTION && getState() == STATE.SELECTING) {
+            drawSelectionRect();
+        }
         requestAnimationFrame(updateCanvas);
-    }
+    };
 
     requestAnimationFrame(updateCanvas);
 
@@ -530,7 +529,8 @@ const enableCanvas = () => {
     canvas.addEventListener("mousedown", event => {
         const mousePosition = getMousePosition(event);
         const tool = getTool();
-        if (event.button == MOUSEBUTTONS.SCROLLWHEEL && (getState() == STATE.UNFOCUSED || getState() == STATE.PANNING)) {
+        const state = getState();
+        if (event.button == MOUSEBUTTONS.SCROLLWHEEL && (state == STATE.UNFOCUSED || state == STATE.PANNING)) {
             canvas.style.cursor = "grab";
             setState(STATE.PANNING);
             setMouseOffset(mousePosition.x, mousePosition.y);
@@ -538,6 +538,7 @@ const enableCanvas = () => {
         }
         switch (tool) {
             case TOOLS.SELECTION: {
+                let startSelecting = false;
                 const elements = getElementsAtPosition(mousePosition);
                 if (elements.length > 0) {
                     let selectedElement = getSelectedElement();
@@ -574,16 +575,43 @@ const enableCanvas = () => {
                                 setState(STATE.RESIZING);
                             }
                         } else {
-                            selectElement(null);
+                            startSelecting = true;
                         }
+                    } else {
+                        startSelecting = true;
                     }
                 } else {
+                    startSelecting = true;
+                }
+                if (startSelecting) {
+                    startSelectionBox(mousePosition);
                     selectElement(null);
+                    setState(STATE.SELECTING);
                 }
                 break;
             }
+            case TOOLS.ARROW: {
+                const element = {
+                    id: getNewElementId(),
+                    coordinates: {
+                        x1: mousePosition.x,
+                        y1: mousePosition.y,
+                        x2: mousePosition.x,
+                        y2: mousePosition.y
+                    },
+                    type: tool,
+                    lines: [
+                        { x: mousePosition.x, y: mousePosition.y },
+                        { x: mousePosition.x, y: mousePosition.y }
+                    ],
+                    quarter: ""
+                }
+                createElement(element);
+                selectElement(element);
+                setState(STATE.DRAWING);
+                break;
+            }
             case TOOLS.TEXT:
-            case TOOLS.ARROW:
             case TOOLS.LINE:
             case TOOLS.RECTANGLE: {
                 const element = {
@@ -618,6 +646,11 @@ const enableCanvas = () => {
         const tool = getTool();
         switch (state) {
             case STATE.UNFOCUSED: {
+                // if (tool == TOOLS.ARROW) {
+                //     const elements = getElementsAtPosition(mousePosition);
+                //     const rectangle = elements.find(element => element.type == TOOLS.RECTANGLE && element.position != POSITION.INSIDE);
+                //     console.log(rectangle);
+                // }
                 if (tool == TOOLS.SELECTION) {
                     const selectedElement = getSelectedElement();
                     if (selectedElement) {
@@ -639,13 +672,60 @@ const enableCanvas = () => {
                 canvas.style.cursor = "crosshair";
                 const element = getLastElement();
                 const { coordinates, type } = element;
+                coordinates.x2 = mousePosition.x;
+                coordinates.y2 = mousePosition.y;
                 switch (type) {
-                    case TOOLS.ARROW:
+                    case TOOLS.ARROW: {
+                        const { x1, y1, x2, y2 } = coordinates;
+                        const [firstLine, secondLine] = element.lines;
+                        const updateLine = (line, x, y) => {
+                            line.x = x;
+                            line.y = y;
+                        };
+                        const width = Math.abs(x2 - x1);
+                        const height = Math.abs(y2 - y1);
+                        if (x1 <= x2 && y1 > y2) {
+                            element.quarter = "first";
+                            if (width > height) {
+                                updateLine(firstLine, x1 + width / 2, y1);
+                                updateLine(secondLine, x1 + width / 2, y1 - height);
+                            } else {
+                                updateLine(firstLine, x1, y1 - height / 2);
+                                updateLine(secondLine, x1 + width, y1 - height / 2);
+                            }
+                        } else if (x1 <= x2 && y1 < y2) {
+                            element.quarter = "second";
+                            if (width > height) {
+                                updateLine(firstLine, x1 + width / 2, y1);
+                                updateLine(secondLine, x1 + width / 2, y1 + height);
+                            } else {
+                                updateLine(firstLine, x1, y1 + height / 2);
+                                updateLine(secondLine, x1 + width, y1 + height / 2);
+                            }
+                        } else if (x1 > x2 && y1 <= y2) {
+                            element.quarter = "third";
+                            if (width > height) {
+                                updateLine(firstLine, x1 - width / 2, y1);
+                                updateLine(secondLine, x1 - width / 2, y1 + height);
+                            } else {
+                                updateLine(firstLine, x1, y1 + height / 2);
+                                updateLine(secondLine, x1 - width, y1 + height / 2);
+                            }
+                        } else if (x1 > x2 && y1 >= y2) {
+                            element.quarter = "fourth";
+                            if (width > height) {
+                                updateLine(firstLine, x1 - width / 2, y1);
+                                updateLine(secondLine, x1 - width / 2, y1 - height);
+                            } else {
+                                updateLine(firstLine, x1, y1 - height / 2);
+                                updateLine(secondLine, x1 - width, y1 - height / 2);
+                            }
+                        }
+                    }
                     case TOOLS.LINE:
-                    case TOOLS.RECTANGLE:
-                        coordinates.x2 = mousePosition.x;
-                        coordinates.y2 = mousePosition.y;
+                    case TOOLS.RECTANGLE: {
                         break;
+                    }
                     default:
                         console.warn(`Неизвестный тип: ${type}`);
                         break;
@@ -683,6 +763,12 @@ const enableCanvas = () => {
                 setState(STATE.UNFOCUSED);
                 break;
             }
+            case STATE.SELECTING: {
+                const selectionBox = getSelectionBox();
+                selectionBox.x2 = mousePosition.x;
+                selectionBox.y2 = mousePosition.y;
+                break;
+            }
             default:
                 console.warn(`Неизвестное состояние: ${state}`);
                 break;
@@ -691,9 +777,13 @@ const enableCanvas = () => {
 
     window.addEventListener("mouseup", event => {
         canvas.style.cursor = "default";
+        const state = getState();
+        if (state == STATE.SELECTING) {
+
+        }
         if (getSelectedElement()) {
-            const state = getState();
             switch (state) {
+                case STATE.SELECTING:
                 case STATE.WRITING:
                 case STATE.UNFOCUSED:
                 case STATE.PANNING:
@@ -752,6 +842,7 @@ const enableCanvas = () => {
             getPressedKeys().add(event.key);
         }
     });
+
     window.addEventListener("keyup", event => getPressedKeys().delete(event.key));
 }
 
