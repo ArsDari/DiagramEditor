@@ -37,6 +37,7 @@ const MOUSEBUTTONS = {
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 10;
 const SCALE_FACTOR = 1.1;
+const FONT_SIZE = 24;
 
 const fileState = {
     elements: [],
@@ -51,8 +52,10 @@ const applicationState = {
     mouseOffset: { x: 0, y: 0 },
     selectedElement: null,
     selectionBox: { x1: 0, y1: 0, x2: 0, y2: 0 },
-    selectedElements: null,
-    pressedKeys: new Set()
+    selectedIds: new Set(),
+    pressedKeys: new Set(),
+    historyIndex: 0,
+    history: [[]]
 };
 
 const getElements = () => fileState.elements;
@@ -109,7 +112,8 @@ const getMouseOffset = () => applicationState.mouseOffset;
 
 const selectElement = element => applicationState.selectedElement = element;
 const getSelectedElement = () => applicationState.selectedElement;
-const getSelectedElements = () => applicationState.selectedElements;
+
+const getSelectedIds = () => applicationState.selectedIds;
 
 const getPressedKeys = () => applicationState.pressedKeys;
 
@@ -234,13 +238,22 @@ const distance = (a, b) => Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y
 const checkPointsProximity = (a, b, distance) => Math.abs(a.x - b.x) <= distance && Math.abs(a.y - b.y) <= distance;
 const isWithinRect = (left, top, right, bottom, point) => point.x > left && point.x < right && point.y > top && point.y < bottom;
 
+const rectContainsRect = (bigRect, smallRect) => {
+    const topLeftPoint = { x: smallRect.x1, y: smallRect.y1 };
+    const topRightPoint = { x: smallRect.x2, y: smallRect.y1 };
+    const bottomLeftPoint = { x: smallRect.x1, y: smallRect.y2 };
+    const bottomRightPoint = { x: smallRect.x2, y: smallRect.y2 };
+    return isWithinRect(bigRect.x1, bigRect.y1, bigRect.x2, bigRect.y2, topLeftPoint) && isWithinRect(bigRect.x1, bigRect.y1, bigRect.x2, bigRect.y2, topRightPoint) &&
+        isWithinRect(bigRect.x1, bigRect.y1, bigRect.x2, bigRect.y2, bottomLeftPoint) && isWithinRect(bigRect.x1, bigRect.y1, bigRect.x2, bigRect.y2, bottomRightPoint);
+};
+
 const positionWithinElement = (position, element) => {
     const { coordinates, type } = element;
     const { x1, y1, x2, y2 } = coordinates;
     const proximity = 5;
     switch (type) {
         case TOOLS.TEXT: {
-            const inside = isWithinRect(x1, y1, x2, y2, position) ? POSITION.INSIDE : null;
+            const inside = isWithinRect(x1 - proximity, y1 - proximity, x2 + proximity, y2 + proximity, position) ? POSITION.INSIDE : null;
             return inside;
         }
         case TOOLS.RECTANGLE: {
@@ -324,22 +337,98 @@ const startSelectionBox = position => {
     selectionBox.y2 = position.y;
 };
 
+const adjustRect = rectangle => {
+    const { x1, y1, x2, y2 } = rectangle;
+    if (x1 > x2) {
+        [rectangle.x1, rectangle.x2] = [rectangle.x2, rectangle.x1];
+    }
+    if (y1 > y2) {
+        [rectangle.y1, rectangle.y2] = [rectangle.y2, rectangle.y1];
+    }
+};
+
+const getHistory = () => applicationState.history;
+const setHistory = history => applicationState.history = history;
+const saveHistory = () => {
+    const history = getHistory();
+    const historyIndex = getHistoryIndex();
+    if (historyIndex < history.length) {
+        history.splice(historyIndex + 1, history.length);
+    }
+    history[historyIndex + 1] = structuredClone(getElements());
+    setHistoryIndex(historyIndex + 1);
+};
+const getHistoryIndex = () => applicationState.historyIndex;
+const setHistoryIndex = index => applicationState.historyIndex = index;
+
+const undo = () => {
+    const historyIndex = getHistoryIndex();
+    const history = getHistory();
+    selectElement(null);
+    getSelectedIds().clear();
+    //console.log(history[historyIndex])
+    if (historyIndex > 0) {
+        fileState.elements = history[historyIndex - 1];
+        setHistoryIndex(historyIndex - 1);
+    }
+}
+
+const redo = () => {
+    const historyIndex = getHistoryIndex();
+    const history = getHistory();
+    selectElement(null);
+    getSelectedIds().clear();
+    //console.log(history[historyIndex])
+    if (historyIndex < history.length - 1) {
+        fileState.elements = history[historyIndex + 1];
+        setHistoryIndex(historyIndex + 1);
+    }
+}
+
 // ---
 
 const enableCanvas = () => {
     const canvas = document.getElementById("canvas");
     const context = canvas.getContext("2d");
-    const currentScaleOnPage = document.getElementById("current-scale");
+    const scalebar = document.getElementById("current-scale");
+    const undoButton = document.getElementById("undo-button");
+    const redoButton = document.getElementById("redo-button");
+    undoButton.onclick = undo;
+    redoButton.onclick = redo;
 
-    document.getElementById("selection").onclick = () => setTool(TOOLS.SELECTION);
-    document.getElementById("line").onclick = () => setTool(TOOLS.LINE);
-    document.getElementById("rectangle").onclick = () => setTool(TOOLS.RECTANGLE);
-    document.getElementById("arrow").onclick = () => setTool(TOOLS.ARROW);
-    //document.getElementById("text").onchange = () => setTool(TOOLS.TEXT);
+    const selectionTool = document.getElementById("selection");
+    const lineTool = document.getElementById("line");
+    const rectangleTool = document.getElementById("rectangle");
+    const arrowTool = document.getElementById("arrow");
+    const textTool = document.getElementById("text");
+
+    selectionTool.onclick = () => {
+        selectionTool.checked = true;
+        setTool(TOOLS.SELECTION);
+    };
+    lineTool.onclick = () => {
+        lineTool.checked = true;
+        setTool(TOOLS.LINE);
+    };
+    rectangleTool.onclick = () => {
+        rectangleTool.checked = true;
+        setTool(TOOLS.RECTANGLE);
+    };
+    arrowTool.onclick = () => {
+        arrowTool.checked = true;
+        setTool(TOOLS.ARROW);
+    };
+    textTool.onchange = () => {
+        textTool.checked = true;
+        setTool(TOOLS.TEXT);
+    };
 
     document.getElementById("zoom-out").onclick = () => handleScale(canvas.width / 2, canvas.height / 2, 1 / SCALE_FACTOR);
     document.getElementById("zoom-in").onclick = () => handleScale(canvas.width / 2, canvas.height / 2, SCALE_FACTOR);
-    currentScaleOnPage.innerHTML = "100%";
+    scalebar.onclick = () => handleScale(canvas.width / 2, canvas.height / 2, 1 / getScale());
+    scalebar.innerHTML = "100%";
+
+    const textArea = document.getElementById("text-input");
 
     // ---
 
@@ -357,35 +446,41 @@ const enableCanvas = () => {
         } else {
             scaleAt(x, y, newScale);
         }
-        currentScaleOnPage.innerHTML = `${Math.trunc(getScale() * 100)}%`;
+        scalebar.innerHTML = `${Math.trunc(getScale() * 100)}%`;
     };
 
     const drawElement = element => {
         const { coordinates, type } = element;
         const { x1, y1, x2, y2 } = coordinates;
+        const selectedIds = getSelectedIds();
         const selectedElement = getSelectedElement();
+        const state = getState();
         context.save();
-        if (selectedElement?.id == element.id && getState() != STATE.DRAWING) {
+        if ((selectedIds.has(element.id) || selectedElement?.id == element.id) && state != STATE.DRAWING && state != STATE.WRITING) {
             context.save();
             context.beginPath();
             context.strokeStyle = "#7572DE";
             context.lineWidth = 1;
             const distance = 5;
             const rectWidth = 10;
+            const width = x2 - x1;
+            const height = y2 - y1;
             switch (type) {
+                case TOOLS.SELECTION: {
+                    break;
+                }
+                case TOOLS.TEXT: {
+                    context.rect(x1 - distance, y1 - distance, width + distance * 2, height + distance * 2);
+                    break;
+                }
                 case TOOLS.LINE:
                 case TOOLS.ARROW: {
                     context.rect(x1 - distance, y1 - distance, rectWidth, rectWidth);
                     context.rect(x2 - distance, y2 - distance, rectWidth, rectWidth);
-                    break;
-                }
-                case TOOLS.SELECTION:
-                case TOOLS.TEXT: {
+                    context.rect(x1, y1, width, height);
                     break;
                 }
                 case TOOLS.RECTANGLE: {
-                    const width = x2 - x1;
-                    const height = y2 - y1;
                     context.rect(x1 - distance, y1 - distance, width + distance * 2, height + distance * 2);
                     context.rect(x1 - rectWidth, y1 - rectWidth, rectWidth, rectWidth);
                     context.rect(x2, y1 - rectWidth, rectWidth, rectWidth);
@@ -470,9 +565,10 @@ const enableCanvas = () => {
                 break;
             }
             case TOOLS.TEXT: {
-                context.textBaseline = "top";
-                context.font = "24px sans-serif";
-                context.fillText(element.text, x1, y1);
+                if (state != STATE.WRITING || selectedElement?.id != element.id) {
+                    const text = element.options.text;
+                    context.fillText(text, x1, y1);
+                }
                 break;
             }
             default:
@@ -508,6 +604,8 @@ const enableCanvas = () => {
     const updateCanvas = () => {
         canvas.width = document.body.clientWidth;
         canvas.height = document.body.clientHeight;
+        context.font = `${FONT_SIZE}px sans-serif`;
+        context.textBaseline = "top";
         context.clearRect(0, 0, canvas.width, canvas.height);
         const scale = getScale();
         const panOffset = getPanOffset();
@@ -530,22 +628,25 @@ const enableCanvas = () => {
         const mousePosition = getMousePosition(event);
         const tool = getTool();
         const state = getState();
+        getSelectedIds().clear();
         if (event.button == MOUSEBUTTONS.SCROLLWHEEL && (state == STATE.UNFOCUSED || state == STATE.PANNING)) {
             canvas.style.cursor = "grab";
             setState(STATE.PANNING);
-            setMouseOffset(mousePosition.x, mousePosition.y);
             return;
         }
         switch (tool) {
             case TOOLS.SELECTION: {
-                let startSelecting = false;
+                if (state == STATE.WRITING) {
+                    return;
+                }
+                let startSelecting = true;
                 const elements = getElementsAtPosition(mousePosition);
                 if (elements.length > 0) {
                     let selectedElement = getSelectedElement();
                     let hadSelectedElement = true;
                     if (!selectedElement) {
                         const element = elements.find(element => {
-                            if (element.type == TOOLS.ARROW || element.type == TOOLS.LINE) {
+                            if (element.type == TOOLS.ARROW || element.type == TOOLS.LINE || element.type == TOOLS.TEXT) {
                                 return true;
                             }
                             return element.position != POSITION.INSIDE;
@@ -554,8 +655,10 @@ const enableCanvas = () => {
                         hadSelectedElement = false;
                     }
                     if (selectedElement) {
+                        setMouseOffset(mousePosition.x, mousePosition.y);
                         selectedElement.position = positionWithinElement(mousePosition, selectedElement);
                         if (selectedElement.position) {
+                            startSelecting = false;
                             const { coordinates, position } = selectedElement;
                             selectedElement.mouseOffset = {
                                 x: mousePosition.x - coordinates.x1,
@@ -566,7 +669,7 @@ const enableCanvas = () => {
                             } else {
                                 if (position == POSITION.TOPRIGHT || position == POSITION.RIGHTLINE) {
                                     selectedElement.mouseOffset.x = mousePosition.x - coordinates.x2;
-                                } else if (position == POSITION.BOTTOMRIGHT) {
+                                } else if (position == POSITION.BOTTOMRIGHT || position == POSITION.END) {
                                     selectedElement.mouseOffset.x = mousePosition.x - coordinates.x2;
                                     selectedElement.mouseOffset.y = mousePosition.y - coordinates.y2;
                                 } else if (position == POSITION.BOTTOMLEFT || position == POSITION.BOTTOMLINE) {
@@ -574,14 +677,8 @@ const enableCanvas = () => {
                                 }
                                 setState(STATE.RESIZING);
                             }
-                        } else {
-                            startSelecting = true;
                         }
-                    } else {
-                        startSelecting = true;
                     }
-                } else {
-                    startSelecting = true;
                 }
                 if (startSelecting) {
                     startSelectionBox(mousePosition);
@@ -627,7 +724,9 @@ const enableCanvas = () => {
                 createElement(element);
                 selectElement(element);
                 if (tool == TOOLS.TEXT) {
-                    element.text = "";
+                    element.options = { text: "" };
+                    selectionTool.checked = true;
+                    setTool(TOOLS.SELECTION);
                     setState(STATE.WRITING);
                 } else {
                     setState(STATE.DRAWING);
@@ -654,14 +753,23 @@ const enableCanvas = () => {
                 if (tool == TOOLS.SELECTION) {
                     const selectedElement = getSelectedElement();
                     if (selectedElement) {
-                        selectedElement.position = positionWithinElement(mousePosition, selectedElement);
-                        canvas.style.cursor = mouseAtPosition(selectedElement.position);
+                        switch (selectedElement.type) {
+                            case TOOLS.ARROW:
+                                break;
+                            default:
+                                selectedElement.position = positionWithinElement(mousePosition, selectedElement);
+                                canvas.style.cursor = mouseAtPosition(selectedElement.position);
+                        }
                     } else {
                         const elements = getElementsAtPosition(mousePosition).filter(element => {
-                            if (element.type == TOOLS.ARROW || element.type == TOOLS.LINE) {
-                                return true;
+                            switch (element.type) {
+                                case TOOLS.ARROW:
+                                case TOOLS.LINE:
+                                case TOOLS.TEXT:
+                                    return true;
+                                default:
+                                    return element.position != POSITION.INSIDE;
                             }
-                            return element.position != POSITION.INSIDE;
                         });
                         canvas.style.cursor = elements.length == 0 ? "default" : "move";
                     }
@@ -758,15 +866,13 @@ const enableCanvas = () => {
                 updatePanOffset(deltaX, deltaY);
                 break;
             }
-            case STATE.WRITING: {
-                console.log('Пишем');
-                setState(STATE.UNFOCUSED);
-                break;
-            }
             case STATE.SELECTING: {
                 const selectionBox = getSelectionBox();
                 selectionBox.x2 = mousePosition.x;
                 selectionBox.y2 = mousePosition.y;
+                break;
+            }
+            case STATE.WRITING: {
                 break;
             }
             default:
@@ -776,31 +882,51 @@ const enableCanvas = () => {
     });
 
     window.addEventListener("mouseup", event => {
+        const oldMousePosition = getMouseOffset();
+        const mousePosition = getMousePosition(event);
+        const selectedElement = getSelectedElement();
         canvas.style.cursor = "default";
         const state = getState();
         if (state == STATE.SELECTING) {
-
+            const selectionBox = getSelectionBox();
+            adjustRect(selectionBox);
+            const selectedIds = getSelectedIds();
+            const insideSelection = getElements().filter(element => {
+                const { coordinates } = element;
+                return rectContainsRect(selectionBox, coordinates);
+            });
+            insideSelection.forEach(element => selectedIds.add(element.id));
         }
-        if (getSelectedElement()) {
-            switch (state) {
+        if (selectedElement) {
+            if (selectedElement.type == TOOLS.TEXT && oldMousePosition.x == mousePosition.x && oldMousePosition.y == mousePosition.y) {
+                setState(STATE.WRITING);
+            }
+            switch (getState()) {
                 case STATE.SELECTING:
-                case STATE.WRITING:
                 case STATE.UNFOCUSED:
                 case STATE.PANNING:
                 case STATE.MOVING:
                     break;
+                case STATE.WRITING: {
+                    const { coordinates, options } = selectedElement;
+                    const screenCoords = toScreen(coordinates.x1, coordinates.y1);
+                    textArea.value = options.text;
+                    textArea.classList.remove("hidden");
+                    textArea.setAttribute("style", `left: ${screenCoords.x}px; top: ${screenCoords.y}px; font-size: ${FONT_SIZE * getScale()}px`);
+                    textArea.focus();
+                    return;
+                }
                 case STATE.DRAWING:
                 case STATE.RESIZING: {
-                    const element = getSelectedElement();
-                    const { coordinates } = element;
+                    const { coordinates } = selectedElement;
                     const width = Math.abs(coordinates.x2 - coordinates.x1);
                     const height = Math.abs(coordinates.y2 - coordinates.y1);
                     if (width <= 2 && height <= 2) {
-                        deleteElement(element.id);
+                        deleteElement(selectedElement.id);
                         break;
                     }
-                    if (element.type == TOOLS.RECTANGLE) {
-                        adjustCoordinates(element);
+                    if (selectedElement.type == TOOLS.RECTANGLE) {
+                        adjustCoordinates(selectedElement);
                     }
                     break;
                 }
@@ -808,6 +934,9 @@ const enableCanvas = () => {
                     console.warn(`Неизвестное состояние: ${state}`);
                     break;
             }
+        }
+        if (state == STATE.MOVING || state == STATE.DRAWING || state == STATE.RESIZING) {
+            saveHistory();
         }
         setState(STATE.UNFOCUSED);
     });
@@ -833,17 +962,41 @@ const enableCanvas = () => {
 
     window.addEventListener("keydown", event => {
         if (event.key == "Delete") {
+            const selectedIds = getSelectedIds();
+            selectedIds.forEach(id => {
+                deleteElement(id);
+            });
+            selectedIds.clear();
             const selectedElement = getSelectedElement();
             if (selectedElement?.id >= 0) {
                 deleteElement(selectedElement.id);
                 selectElement(null);
             }
+            saveHistory();
         } else {
             getPressedKeys().add(event.key);
         }
     });
 
-    window.addEventListener("keyup", event => getPressedKeys().delete(event.key));
+    window.addEventListener("keyup", event => {
+        getPressedKeys().delete(event.key);
+    });
+
+    textArea.addEventListener("blur", event => {
+        const textElement = getSelectedElement();
+        const { coordinates, options } = textElement;
+        options.text = textArea.value;
+        coordinates.x2 = coordinates.x1 + context.measureText(options.text).width;
+        coordinates.y2 = coordinates.y1 + FONT_SIZE;
+        textArea.value = "";
+        textArea.classList.add("hidden");
+        if (options.text == "") {
+            deleteElement(textElement.id);
+            selectElement(null);
+        }
+        setState(STATE.UNFOCUSED);
+        saveHistory();
+    });
 }
 
 window.addEventListener("DOMContentLoaded", enableCanvas);

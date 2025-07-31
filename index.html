@@ -28,24 +28,29 @@
                     </div>
                     <div class="toolbar-tool">
                         <input type="radio" name="tool" id="arrow" class="toolbar-button">
-                        <label for="text" class="toolbar-description">Стрелка</label>
+                        <label for="arrow" class="toolbar-description">Стрелка</label>
                     </div>
-                    <!-- <div class="toolbar-tool">
+                    <div class="toolbar-tool">
                         <input type="radio" name="tool" id="text" class="toolbar-button">
                         <label for="text" class="toolbar-description">Текст</label>
-                    </div> -->
+                    </div>
                 </div>
             </div>
             <div class="menu-bottom">
                 <div class="toolbar">
                     <div class="toolbar-tool scale-tool">
                         <button id="zoom-out">-</button>
-                        <div id="current-scale"></div>
+                        <button id="current-scale"></button>
                         <button id="zoom-in">+</button>
+                    </div>
+                    <div class="toolbar-tool history-tool">
+                        <button id="undo-button">Отменить</button>
+                        <button id="redo-button">Повторить</button>
                     </div>
                 </div>
             </div>
         </div>
+        <textarea id="text-input" class="hidden"></textarea>
         <canvas id="canvas">Не поддерживается браузером</canvas>
     </div>
 </body>
